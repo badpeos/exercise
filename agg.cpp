@@ -15,12 +15,15 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
+#include <numeric>
 #include <regex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 struct Option {
     Option() :
@@ -205,43 +208,56 @@ public :
         return parse(content, delimiter);
     }
 
-    typedef std::unordered_map<std::string, long double> AggType;
+    typedef std::deque<std::pair<std::string, long double>> AggType;
     static AggType aggregrate(const Data &data)
     {
         AggType result;
+        std::unordered_map<std::string, int> order;
+        int size = 0;
 
         auto iter = data.rows.cbegin();
         while (iter != data.rows.cend())
         {
             const std::string &name = (*iter)[1];
-            long long value = std::strtold((*iter)[2].c_str(), NULL);
-            result[name] += value;
-
+            long double value = std::strtold((*iter)[2].c_str(), NULL);
+            auto loc = order.find(name);
+            if (loc != order.end())
+            {
+                result[loc->second].second += value;
+            }
+            else
+            {
+                order[name] = size++;
+                result.push_back(std::make_pair(name, value));
+            }
+            
             ++iter;
         }
 
         return result;
     }
 
-    void print(AggType &agg, bool sorted, int K)
+    static void print(AggType &agg, bool sorted, int K)
     {
         // copy to vector
-        std::vector<std::string> key;
-        key.reserve(agg.size());
-        for (auto &a : agg)
-        {
-            key.push_back(a.first);
-        }
+        std::vector<int> order(agg.size());
+        std::iota(order.begin(), order.end(), 0);
 
         if (sorted)
         {
-            std::sort(key.begin(), key.end());
-        }
+            // sort according to agg[i].first and put the result to order
+            std::sort(order.begin(), order.end(),
+                [&agg](int a, int b)
+                {
+                    return agg[a].first < agg[b].first;
+                }
+            );
+        }   
 
         long i = 0;
         while (i < static_cast<long>(agg.size()) && (K == -1 || i < K))
         {
-            std::cout << key[i] << ":" << agg[key[i]] << std::endl;
+            std::cout << agg[order[i]].first << ":" << agg[order[i]].second << std::endl;
             ++i;
         }
     }
